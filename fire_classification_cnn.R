@@ -1,26 +1,34 @@
 library(tensorflow)
-tf$config$list_physical_devices("GPU")
-exit
 library(keras)
 
 seed <- 42
-img_height <- 600
-img_width <- 600
+img_height <- 100
+img_width <- 100
 batch_size <- 2
-epochs <- 1L
-initial_lr <- 0.001
+epochs <- 10L
+initial_lr <- 0.0001
 weight_decay <- 0.0001
+model_size <- "b0"
 train_dataset_path <- file.path("datasets", "fire_dataset", "train")
 test_dataset_path <- file.path("datasets", "fire_dataset", "test")
+checkpoint_path <- file.path("training", paste0("efficient_net_", model_size), "cp-list{epoch:04d}.ckpt")
+best_checkpoint_path <- file.path("training", paste0("efficient_net_", model_size), "cp-list0001.ckpt")
 
 
 # defining the feature extractor with transfer learning
-efficient_net <- application_efficientnet_b7(
-  include_top = FALSE,
-  weights = "imagenet",
-  pooling = "max"
-)
-
+if(model_size == "b0") {
+  efficient_net <- application_efficientnet_b0(
+    include_top = FALSE,
+    weights = "imagenet",
+    pooling = "max"
+  )
+} else if(model_size == "b7") {
+  efficient_net <- application_efficientnet_b7(
+    include_top = FALSE,
+    weights = "imagenet",
+    pooling = "max"
+  )
+}
 
 # to print the new learning rate
 get_lr_metric <- function(optimizer) {
@@ -76,23 +84,46 @@ test_dataset <- image_dataset_from_directory(
   seed = seed
 )
 
-# the number of times the lr is decreased is the number of batch for each epoch
-# per the number of epochs the learning rate will reach the limit of 0 at the last batch
-cardinality <- train_dataset$cardinality()$numpy()
-decay_steps <- epochs * as.integer(cardinality)
+# halven the lr after each epoch
+lr_step_decay <- function(epoch, lr) {
+  drop_rate <- 0.5
+  epochs_drop <- 1.0
+  return (initial_lr * drop_rate^(floor(epoch / epochs_drop)))
+}
 
-lr_schedule = keras$optimizers$schedules$CosineDecay(
-  initial_learning_rate = initial_lr,
-  decay_steps = decay_steps
+optimizer = keras$optimizers$Adam(weight_decay = weight_decay)
+
+# Create a callback that saves the model's weights
+checkpoint_callback = callback_model_checkpoint(
+  checkpoint_path,
+  save_weights_only = TRUE,
+  # save_freq = num_train_batches,
+  verbose = 1
 )
-optimizer = keras$optimizers$Adam(learning_rate = lr_schedule, weight_decay = weight_decay)
-new_lr = get_lr_metric(optimizer)
+
+metrics = c(
+  "accuracy",
+  keras$metrics$Precision(),
+  keras$metrics$Recall(),
+  keras$metrics$FalseNegatives(),
+  keras$metrics$FalsePositives(),
+  keras$metrics$TrueNegatives(),
+  keras$metrics$TruePositives()
+)
 
 model %>% compile(
   optimizer = optimizer,
   loss = "binary_crossentropy",
-  metrics = c("accuracy", keras$metrics$Precision(), keras$metrics$Recall(), new_lr)
+  metrics = metrics
 )
 
-history = model$fit(train_dataset, validation_data = val_dataset, epochs = epochs)
-results = model$evaluate(test_images, verbose=0)
+history = model$fit(
+  train_dataset,
+  epochs = epochs,
+  validation_data = val_dataset,
+  callbacks = list(checkpoint_callback, keras$callbacks$LearningRateScheduler(lr_step_decay, verbose=1))
+)
+
+# Loads the weights and test the model
+load_model_weights_tf(model, best_checkpoint_path)
+restored_model <- model %>% evaluate(test_dataset, verbose = 2)

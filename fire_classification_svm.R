@@ -48,7 +48,7 @@ train_dataset <- train_dataset[sample(1:nrow(train_dataset)), ]
 train_dataset <- extract_hog_features(train_dataset)
 
 # SVM
-model <- svm(label ~ ., data = train_dataset, kernel = "polinomial", cost = 5)
+model <- svm(label ~ ., data = train_dataset, kernel = "radial", cost = 5)
 summary(model)
 
 # extract features from the test set
@@ -56,6 +56,3 @@ test_dataset <- extract_hog_features(test_dataset)
 
 # evaluation
 pred <- predict(model, train_dataset)
-temp <- data.frame(pred = pred, true = train_dataset$label)
-print(temp)
-confusionMatrix(pred, train_dataset$labels)
