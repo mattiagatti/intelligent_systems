@@ -1,23 +1,31 @@
+library(ggplot2)
 library(tensorflow)
 library(keras)
 
 seed <- 42
-img_height <- 100
-img_width <- 100
-batch_size <- 2
+img_height <- 256
+img_width <- 256
+batch_size <- 32
 epochs <- 10L
-initial_lr <- 0.0001
+initial_lr <- 0.0001  # low lr for fine tuning
 weight_decay <- 0.0001
-model_size <- "b0"
+model_size <- "b7"
 train_dataset_path <- file.path("datasets", "fire_dataset", "train")
 test_dataset_path <- file.path("datasets", "fire_dataset", "test")
-checkpoint_path <- file.path("training", paste0("efficient_net_", model_size), "cp-list{epoch:04d}.ckpt")
-best_checkpoint_path <- file.path("training", paste0("efficient_net_", model_size), "cp-list0001.ckpt")
+big_test_dataset_path <- file.path("datasets", "forest_fire_dataset", "train")
+checkpoint_dir <- file.path("training", paste0("efficient_net_", model_size))
+checkpoint_path <- file.path(checkpoint_dir, "cp-list{epoch:04d}.ckpt")
 
 
 # defining the feature extractor with transfer learning
 if(model_size == "b0") {
-  efficient_net <- application_efficientnet_b0(
+  efficient_net <- application_efficientnet_b3(
+    include_top = FALSE,
+    weights = "imagenet",
+    pooling = "max"
+  )
+} else if(model_size == "b3") {
+  efficient_net <- application_efficientnet_b3(
     include_top = FALSE,
     weights = "imagenet",
     pooling = "max"
@@ -80,9 +88,21 @@ test_dataset <- image_dataset_from_directory(
   color_mode = "rgb",
   batch_size = batch_size,
   image_size = c(img_height, img_width),
-  shuffle = TRUE,
-  seed = seed
 )
+
+big_test_dataset <- image_dataset_from_directory(
+  big_test_dataset_path,
+  labels = "inferred",
+  label_mode = "int",
+  color_mode = "rgb",
+  batch_size = batch_size,
+  image_size = c(img_height, img_width),
+)
+
+# cosine annealing scheduler
+lr_cosine_decay <- function(epoch, lr) {
+  return (0.5 * initial_lr * (1 + cos(epoch / epochs * pi)))
+}
 
 # halven the lr after each epoch
 lr_step_decay <- function(epoch, lr) {
@@ -97,7 +117,6 @@ optimizer = keras$optimizers$Adam(weight_decay = weight_decay)
 checkpoint_callback = callback_model_checkpoint(
   checkpoint_path,
   save_weights_only = TRUE,
-  # save_freq = num_train_batches,
   verbose = 1
 )
 
@@ -121,9 +140,16 @@ history = model$fit(
   train_dataset,
   epochs = epochs,
   validation_data = val_dataset,
-  callbacks = list(checkpoint_callback, keras$callbacks$LearningRateScheduler(lr_step_decay, verbose=1))
+  callbacks = list(checkpoint_callback, keras$callbacks$LearningRateScheduler(lr_cosine_decay, verbose=1))
 )
 
+# save model history
+history_df <- as.data.frame(history$history)
+history_df <- history_df[1:(length(history_df)-epochs)]
+saveRDS(history_df, file=file.path(checkpoint_dir, "history.Rda"))
+
 # Loads the weights and test the model
+best_checkpoint_path <- file.path(checkpoint_dir, "cp-list0006.ckpt")
 load_model_weights_tf(model, best_checkpoint_path)
-restored_model <- model %>% evaluate(test_dataset, verbose = 2)
+restored_model <- model %>% evaluate(test_dataset, verbose = 1)
+restored_model <- model %>% evaluate(big_test_dataset, verbose = 1)

@@ -45,10 +45,10 @@ set.seed(42)
 train_dataset <- train_dataset[sample(1:nrow(train_dataset)), ]
 
 # extract features from the training set
-train_dataset <- extract_hog_features(train_dataset)
+train_dataset <- extract_features(train_dataset)
 
 # SVM
-model <- svm(label ~ ., data = train_dataset, kernel = "radial", cost = 5)
+model <- svm(label ~ ., data = train_dataset, kernel = "radial")
 summary(model)
 
 # extract features from the test set

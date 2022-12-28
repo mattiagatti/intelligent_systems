@@ -1,5 +1,9 @@
-FIRE Dataset: https://www.kaggle.com/datasets/phylake1337/fire-dataset
-Landscape Dataset: https://www.kaggle.com/datasets/arnaud58/landscape-pictures
+- FIRE Dataset: https://www.kaggle.com/datasets/phylake1337/fire-dataset
+- Forest Fire Dataset: https://www.kaggle.com/datasets/mohnishsaiprasad/forest-fire-images/code
+- Landscape Dataset: https://www.kaggle.com/datasets/arnaud58/landscape-pictures
+
+The second dataset was used as a test set.
+The last dataset dataset can be useful to balance the number of non_fire samples of the first dataset.
 
 To install TensorFlow for R:
 1. Install RTools: https://cran.r-project.org/bin/windows/Rtools/
