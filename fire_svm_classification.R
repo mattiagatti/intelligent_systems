@@ -3,12 +3,14 @@ library(keras)
 library(reticulate)
 library(e1071)
 
+img_size <- c(256L, 256L)
+img_shape <- c(img_size, 3L)
 
 efficient_net <- application_efficientnet_b0(
   include_top = FALSE,
   weights = "imagenet",
   pooling = "max",
-  input_shape = c(img_height, img_width)
+  input_shape = img_shape
 )
 
 model = keras$Sequential()
@@ -33,7 +35,7 @@ extract_features <- function(dataset) {
   for(i in 1:nrow(dataset)) {
     path <- dataset[i, "path"]
     label <- dataset[i, "label"]
-    image <- keras$utils$load_img(path)
+    image <- keras$utils$load_img(path, target_size = img_size)
     input_arr <- keras$utils$img_to_array(image)
     py_run_string("import tensorflow as tf")
     py_run_string("input_arr = np.array([r.input_arr])")

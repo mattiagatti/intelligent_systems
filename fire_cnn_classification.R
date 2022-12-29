@@ -1,11 +1,10 @@
-library(ggplot2)
 library(tensorflow)
 library(keras)
 
 seed <- 42
-img_height <- 256
-img_width <- 256
-batch_size <- 32
+img_size <- c(256L, 256L)
+img_shape <- c(img_size, 3L)
+batch_size <- 32L
 epochs <- 10L
 initial_lr <- 0.0001  # low lr for fine tuning
 weight_decay <- 0.0001
@@ -17,34 +16,34 @@ checkpoint_dir <- file.path("training", model_name)
 checkpoint_path <- file.path(checkpoint_dir, "cp-list{epoch:04d}.ckpt")
 
 
-# defining the feature extractor with transfer learning
+# defining the feature extractor (transfer learning)
 if(model_name == "efficient_net_b0") {
   efficient_net <- application_efficientnet_b0(
     include_top = FALSE,
     weights = "imagenet",
     pooling = "max",
-    input_shape = c(img_height, img_width)
+    input_shape = img_shape
   )
 } else if(model_name == "efficient_net_b3") {
   efficient_net <- application_efficientnet_b3(
     include_top = FALSE,
     weights = "imagenet",
     pooling = "max",
-    input_shape = c(img_height, img_width)
+    input_shape = img_shape
   )
 } else if(model_name == "efficient_net_b7") {
   efficient_net <- application_efficientnet_b7(
     include_top = FALSE,
     weights = "imagenet",
     pooling = "max",
-    input_shape = c(img_height, img_width)
+    input_shape = img_shape
   )
 } else if(model_name == "resnet_50") {
     efficient_net <- application_resnet50(
       include_top = FALSE,
       weights = "imagenet",
       pooling = "max",
-      input_shape = c(img_height, img_width)
+      input_shape = img_shape
   )
 }
 
@@ -71,7 +70,7 @@ train_dataset <- image_dataset_from_directory(
   label_mode = "int",
   color_mode = "rgb",
   batch_size = batch_size,
-  image_size = c(img_height, img_width),
+  image_size = img_size,
   shuffle = TRUE,
   seed = seed,
   validation_split = 0.1,
@@ -84,7 +83,7 @@ val_dataset <- image_dataset_from_directory(
   label_mode = "int",
   color_mode = "rgb",
   batch_size = batch_size,
-  image_size = c(img_height, img_width),
+  image_size = img_size,
   shuffle = TRUE,
   seed = seed,
   validation_split = 0.1,
@@ -97,7 +96,7 @@ test_dataset <- image_dataset_from_directory(
   label_mode = "int",
   color_mode = "rgb",
   batch_size = batch_size,
-  image_size = c(img_height, img_width),
+  image_size = img_size,
 )
 
 big_test_dataset <- image_dataset_from_directory(
@@ -106,7 +105,7 @@ big_test_dataset <- image_dataset_from_directory(
   label_mode = "int",
   color_mode = "rgb",
   batch_size = batch_size,
-  image_size = c(img_height, img_width),
+  image_size = img_size,
 )
 
 # cosine annealing scheduler
