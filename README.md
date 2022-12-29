@@ -1,9 +1,9 @@
+Datasets:
 - FIRE Dataset: https://www.kaggle.com/datasets/phylake1337/fire-dataset
 - Forest Fire Dataset: https://www.kaggle.com/datasets/mohnishsaiprasad/forest-fire-images/code
 - Landscape Dataset: https://www.kaggle.com/datasets/arnaud58/landscape-pictures
 
-The second dataset was used as a test set.
-The last dataset dataset can be useful to balance the number of non_fire samples of the first dataset.
+The first two datasets have to be copied inside the datasets folder (adjust the paths if you choose different locations). The split script is used to split the first dataset between train set and test set (to compare the models without validation set bias). The second dataset is used as a big test set (4000 images after removing corrupted files) to evaluate model performance outside the starting dataset. The last dataset dataset can be useful to balance the number of non_fire samples of the first dataset. 
 
 To install TensorFlow for R:
 1. Install RTools: https://cran.r-project.org/bin/windows/Rtools/

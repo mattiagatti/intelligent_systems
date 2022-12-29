@@ -8,7 +8,7 @@ batch_size <- 32L
 epochs <- 10L
 initial_lr <- 0.0001  # low lr for fine tuning
 weight_decay <- 0.0001
-model_name <- "efficient_net_b0"
+model_name <- "resnet_50"
 train_dataset_path <- file.path("datasets", "fire_dataset", "train")
 test_dataset_path <- file.path("datasets", "fire_dataset", "test")
 big_test_dataset_path <- file.path("datasets", "forest_fire_dataset", "train")
@@ -158,7 +158,7 @@ history_df <- history_df[1:(length(history_df)-epochs)]
 saveRDS(history_df, file=file.path(checkpoint_dir, "history.Rda"))
 
 # Loads the weights and test the model
-best_checkpoint_path <- file.path(checkpoint_dir, "cp-list0006.ckpt")
+best_checkpoint_path <- file.path(checkpoint_dir, "cp-list0004.ckpt")
 load_model_weights_tf(model, best_checkpoint_path)
 restored_model <- model %>% evaluate(test_dataset, verbose = 1)
 restored_model <- model %>% evaluate(big_test_dataset, verbose = 1)
