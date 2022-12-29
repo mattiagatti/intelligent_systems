@@ -1,31 +1,55 @@
-library(caret)
+library(tensorflow)
+library(keras)
+library(reticulate)
 library(e1071)
-library(OpenImageR)
 
 
-# extracting features based on the gradients
-extract_hog_features <- function(dataset) {
-  feature_count <- 54
-  col_names <- c(paste0("feature_", 1:feature_count), "label")
+efficient_net <- application_efficientnet_b0(
+  include_top = FALSE,
+  weights = "imagenet",
+  pooling = "max",
+  input_shape = c(img_height, img_width)
+)
+
+model = keras$Sequential()
+model$add(efficient_net)
+model$add(keras$layers$Dense(units = 120, activation = "relu"))
+model$add(keras$layers$Dense(units = 120, activation = "relu"))
+model$add(keras$layers$Dense(units = 1, activation = "sigmoid"))
+
+checkpoint_path <- file.path("training", "efficient_net_b0", "cp-list0006.ckpt")
+load_model_weights_tf(model, checkpoint_path)
+
+# removing last two layers
+pop_layer(model)
+pop_layer(model)
+
+feature_count <- 120
+col_names <- c(paste0("feature_", 1:feature_count), "label")
+
+extract_features <- function(dataset) {
   features <- data.frame()
   
   for(i in 1:nrow(dataset)) {
     path <- dataset[i, "path"]
     label <- dataset[i, "label"]
-    image <- readImage(path)
-    sample_features <- HOG(image, cells = 3, orientations = 6)
+    image <- keras$utils$load_img(path)
+    input_arr <- keras$utils$img_to_array(image)
+    py_run_string("import tensorflow as tf")
+    py_run_string("input_arr = np.array([r.input_arr])")
+    py_run_string("sample_features = r.model(input_arr).numpy().squeeze()")
+    sample_features <- py$sample_features
     row <- c(sample_features, label)
     features <- rbind(features, row)
-    print(path)
+    print(paste(i, nrow(dataset), sep = " / "))
   }
-  
   colnames(features) <- col_names
-  features$label <- as.factor(features$label)
+  train_features$label <- as.factor(train_features$label)
   return(features)
 }
 
-train_dataset_path <- file.path("datasets", "fire_dataset", "train_gray")
-test_dataset_path <- file.path("datasets", "fire_dataset", "test_gray")
+train_dataset_path <- file.path("datasets", "fire_dataset", "train")
+test_dataset_path <- file.path("datasets", "fire_dataset", "test")
 
 train_images <- list.files(path = train_dataset_path, full.names = TRUE, recursive = TRUE)
 test_images <- list.files(path = test_dataset_path, full.names = TRUE, recursive = TRUE)
@@ -44,15 +68,15 @@ test_dataset <- data.frame(path = test_images, label = test_labels)
 set.seed(42)
 train_dataset <- train_dataset[sample(1:nrow(train_dataset)), ]
 
-# extract features from the training set
+# extract features for each image
 train_dataset <- extract_features(train_dataset)
+saveRDS(train_dataset, file=file.path("datasets", "fire_dataset", "train_dataset.Rda"))
 
 # SVM
 model <- svm(label ~ ., data = train_dataset, kernel = "radial")
 summary(model)
 
-# extract features from the test set
-test_dataset <- extract_hog_features(test_dataset)
-
-# evaluation
-pred <- predict(model, train_dataset)
+# test model
+test_dataset <- extract_features(test_dataset)
+saveRDS(test_dataset, file=file.path("datasets", "fire_dataset", "test_dataset.Rda"))
+pred <- predict(model, test_dataset)

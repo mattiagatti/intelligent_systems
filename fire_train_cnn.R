@@ -9,32 +9,42 @@ batch_size <- 32
 epochs <- 10L
 initial_lr <- 0.0001  # low lr for fine tuning
 weight_decay <- 0.0001
-model_size <- "b7"
+model_name <- "efficient_net_b0"
 train_dataset_path <- file.path("datasets", "fire_dataset", "train")
 test_dataset_path <- file.path("datasets", "fire_dataset", "test")
 big_test_dataset_path <- file.path("datasets", "forest_fire_dataset", "train")
-checkpoint_dir <- file.path("training", paste0("efficient_net_", model_size))
+checkpoint_dir <- file.path("training", model_name)
 checkpoint_path <- file.path(checkpoint_dir, "cp-list{epoch:04d}.ckpt")
 
 
 # defining the feature extractor with transfer learning
-if(model_size == "b0") {
+if(model_name == "efficient_net_b0") {
+  efficient_net <- application_efficientnet_b0(
+    include_top = FALSE,
+    weights = "imagenet",
+    pooling = "max",
+    input_shape = c(img_height, img_width)
+  )
+} else if(model_name == "efficient_net_b3") {
   efficient_net <- application_efficientnet_b3(
     include_top = FALSE,
     weights = "imagenet",
-    pooling = "max"
+    pooling = "max",
+    input_shape = c(img_height, img_width)
   )
-} else if(model_size == "b3") {
-  efficient_net <- application_efficientnet_b3(
-    include_top = FALSE,
-    weights = "imagenet",
-    pooling = "max"
-  )
-} else if(model_size == "b7") {
+} else if(model_name == "efficient_net_b7") {
   efficient_net <- application_efficientnet_b7(
     include_top = FALSE,
     weights = "imagenet",
-    pooling = "max"
+    pooling = "max",
+    input_shape = c(img_height, img_width)
+  )
+} else if(model_name == "resnet_50") {
+    efficient_net <- application_resnet50(
+      include_top = FALSE,
+      weights = "imagenet",
+      pooling = "max",
+      input_shape = c(img_height, img_width)
   )
 }
 
