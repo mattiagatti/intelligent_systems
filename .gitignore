@@ -4,5 +4,6 @@
 .Ruserdata
 fire_dataset
 landscape_dataset
-datasets
+datasets/fire_dataset
+datasets/forest_fire_dataset
 training

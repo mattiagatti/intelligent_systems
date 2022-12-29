@@ -11,9 +11,3 @@ summary(train_dataset)
 
 # drop features with more than 1/3 NA values
 train_dataset <- train_dataset[, colSums(is.na(train_dataset)) <= sample_count / 3]
-print(ncol(train_dataset))
-
-print(colSums(is.na(train_dataset)))
-
-# median is a better replacement instead of the mean
-# in case of outliers
