@@ -29,13 +29,29 @@ remove_outliers <- function(dataframe, columns = names(dataframe), method) {
   return(dataframe)
 }
 
+corr_matrix <- function(df, method) {
+  if(method == "pearson") {
+    corr <- cor(df %>% select(where(is.numeric)), use = "pairwise.complete.obs", method = method)
+    print("Highly correlated numeric features: ")
+  } else if(method == "spearman") {
+    df <- cbind(df %>% select(where(is.factor)), SalePrice = df$SalePrice)
+    df <- sapply(df, as.numeric)
+    corr <- cor(df, use = "pairwise.complete.obs", method = method)
+    print("Highly correlated categorical features: ")
+  }
+  highlyCorrelated <- findCorrelation(corr, cutoff = 0.6)
+  print(highlyCorrelated)
+  corr[upper.tri(corr)] <- 0
+  corrplot(corr, method = "circle")
+  
+  return (highlyCorrelated)
+}
+
 train_dataset_path <- file.path("datasets", "house_prices_dataset", "train.csv")
 test_dataset_path <- file.path("datasets", "house_prices_dataset", "test.csv")
 
 train_dataset <- read.csv(train_dataset_path)
 test_dataset <- read.csv(test_dataset_path)
-
-sample_count <- nrow(train_dataset)  # for normality assumption of ols
 
 # looking a couple of the first rows
 head(train_dataset)
@@ -60,6 +76,7 @@ summary(train_dataset)
 
 # remove Id column
 train_dataset <- select(train_dataset, -Id)
+train_dataset <- select(train_dataset, -GarageYrBlt)
 
 # print the number of NA values for each column
 print(colSums(is.na(train_dataset)))
@@ -75,23 +92,26 @@ train_dataset <- train_dataset %>% mutate(across(where(is.character), ~replace_n
 train_dataset <- train_dataset %>% mutate(across(where(is.character), as.factor))
 
 # print correlation matrix of numeric features
-corr <- cor(train_dataset %>% select(where(is.numeric)), use = "pairwise.complete.obs")
-highlyCorrelated <- findCorrelation(corr, cutoff = 0.75)
-print(highlyCorrelated)
-corr[upper.tri(corr)] <- 0
-corrplot(corr, method = "circle")
+highlyCorrelatedNum <- corr_matrix(train_dataset, method = "pearson")
+
+# print correlation matrix of categorical features
+highlyCorrelatedCateg <- corr_matrix(train_dataset, method = "spearman")
+
+# merge indexes
+highlyCorrelated <- c(highlyCorrelatedNum, highlyCorrelatedCateg)
+# train_dataset <- select(train_dataset, -highlyCorrelated)
 
 # remove GarageCars because it's higly correlated to GarageArea
 train_dataset <- select(train_dataset, -GarageCars)
-
-# compare TotRmsAbvGrd vs GrLivArea
-ggplot(train_dataset, aes(TotRmsAbvGrd, GrLivArea)) + geom_point()
 
 # remove TotRmsAbvGrd because it's higly correlated to GrLivArea
 train_dataset <- select(train_dataset, -TotRmsAbvGrd)
 
 # plot stronger correlations to check homoscedasticity / heteroscedasticity assumption
-ggplot(train_dataset, aes(OverallQual, SalePrice, group = OverallQual)) + geom_boxplot()
+ggplot(train_dataset, aes(x = factor(OverallQual,level=1:10), y = SalePrice,
+                          fill = OverallQual)) + geom_boxplot() +
+                          scale_x_discrete(name ="OverallQual") +
+                          scale_fill_discrete(breaks=1:10) 
 ggplot(train_dataset, aes(TotalBsmtSF, SalePrice)) + geom_point()
 ggplot(train_dataset, aes(X1stFlrSF, SalePrice)) + geom_point()
 ggplot(train_dataset, aes(GrLivArea, SalePrice)) + geom_point()
@@ -117,13 +137,11 @@ bagged_cv <- train(
 # validation metrics
 print(bagged_cv)
 
-# CV liner model
 linear_cv <- train(
   SalePrice ~ .,
   data = train_dataset,
-  method = "lm",
-  trControl = ctrl,
-  importance = TRUE
+  method = 'lm',
+  trControl = ctrl
 )
 
 # validation metrics
@@ -141,19 +159,25 @@ test_dataset$YrSold <- as.character(test_dataset$YrSold)
 test_dataset$YrSold <- as.character(test_dataset$YrSold)
 test_dataset <- train_dataset %>% mutate(across(where(is.integer), as.numeric))
 
-# final test evaluation
-pred <- predict(bagged_cv, test_dataset)
-MAE(pred, test_dataset$SalePrice)
+# final test evaluation cart
+pred_cart <- predict(bagged_cv, test_dataset)
+MAE(pred_cart, test_dataset$SalePrice)
 
-# checking how the error is distributed
-results <- data.frame(pred = pred, target = test_dataset$SalePrice, error = abs(pred - test_dataset$SalePrice))
-ggplot(results, aes(pred, target)) + geom_point() + geom_abline(0, slope = 1, color = "red")
+# final test evaluation linear
+pred_lm <- predict(linear_cv, test_dataset)
+MAE(pred_lm, test_dataset$SalePrice)
 
-# plotting errors distribution
-ggplot(results, aes(error)) + geom_density(aes(y = ..count..), fill = "lightgray") +
+# checking how the cart error is distributed
+results_cart <- data.frame(pred = pred_cart, target = test_dataset$SalePrice, error = pred_cart - test_dataset$SalePrice)
+ggplot(results_cart, aes(pred, target)) + geom_point() + geom_abline(aes(intercept = 0, slope = 1, color = "red"))
+
+# plotting errors distribution cart
+ggplot(results_cart, aes(error)) + geom_density(aes(y = ..count..), fill = "lightgray") +
   geom_vline(aes(xintercept = mean(error)), 
              linetype = "dashed", size = 0.6,
              color = "red")
 
 # compute metrics for Kaggle submission
-print(RMSE(log(results$pred), log(results$target)))
+# RMSE of logs is used because taking logs means that errors in predicting
+# expensive houses and cheap houses will affect the result equally.
+print(RMSE(log(results_cart$pred), log(results_cart$target)))

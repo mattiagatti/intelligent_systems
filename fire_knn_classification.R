@@ -1,9 +1,9 @@
-library(tensorflow)
-library(keras)
-library(reticulate)
-library(e1071)
-library(class)
 library(caret)
+library(class)
+library(e1071)
+library(keras)
+library(tensorflow)
+library(reticulate)
 
 img_size <- c(256L, 256L)
 img_shape <- c(img_size, 3L)
@@ -92,7 +92,7 @@ perform_knn <- function(test, k) {
   confusionMatrix(table(knn, cl_test))
 }
 
-# found best k with cross validation
+# found best k with cross validation (had to remove it because it takes too much RAM)
 best_k <- 5
 perform_knn(test_dataset, best_k)
 
@@ -108,8 +108,8 @@ final_test_df_path <- file.path(final_test_dataset_path, "test_dataset.Rda")
 if(!file.exists(final_test_df_path)) {
   final_test_dataset <- extract_features(final_test_dataset)
   saveRDS(final_test_dataset, file=file.path(final_test_df_path))
-} else {
-  final_test_dataset <- readRDS(final_test_df_path)
+  } else {
+    final_test_dataset <- readRDS(final_test_df_path)
 }
 
 perform_knn(final_test_dataset, best_k)
