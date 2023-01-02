@@ -1,5 +1,6 @@
 library(tensorflow)
 library(keras)
+library(tfaddons)
 library(stringr)
 library(tidyverse)
 library(ggplot2)
@@ -13,7 +14,7 @@ batch_size <- 32L
 epochs <- 10L
 initial_lr <- 0.0001  # low lr for fine tuning
 weight_decay <- 0.0001
-model_name <- "efficient_net_b0"
+model_name <- "resnet_50"
 train_dataset_path <- file.path("datasets", "fire_dataset", "train")
 test_dataset_path <- file.path("datasets", "fire_dataset", "test")
 big_test_dataset_path <- file.path("datasets", "forest_fire_dataset", "train")
@@ -60,7 +61,6 @@ get_lr_metric <- function(optimizer) {
   }
   return(lr)
 }
-
 
 # adding to the feature extractor the head to perform binary classification
 model = keras$Sequential()
@@ -173,8 +173,8 @@ best_epoch <- str_pad(best_epoch, 4, pad = "0")
 # Loads the weights and test the model
 best_checkpoint_path <- file.path(checkpoint_dir, paste0("cp-list", best_epoch , ".ckpt"))
 load_model_weights_tf(model, best_checkpoint_path)
-test_metrics <- model %>% evaluate(test_dataset, verbose = 1)
-big_test_metrics <- model %>% evaluate(big_test_dataset, verbose = 1)
+test_metrics <- model %>% tensorflow::evaluate(test_dataset, verbose = 1)
+big_test_metrics <- model %>% tensorflow::evaluate(big_test_dataset, verbose = 1)
 
 # plot cm from metrics
 cm <- c(big_test_metrics[8], big_test_metrics[6], big_test_metrics[5], big_test_metrics[7])
@@ -201,4 +201,4 @@ ggplot(lines, aes(x = epoch, y = value)) +
   geom_line(aes(color = variable)) + 
   scale_color_manual(values = c("red", "blue")) +
   scale_x_continuous(breaks = 1:10) +
-  scale_y_continuous(breaks = (0:20)/20)
+  scale_y_continuous(breaks = seq(0, 1, 0.05))
