@@ -14,10 +14,10 @@ batch_size <- 32L
 epochs <- 10L
 initial_lr <- 0.0001  # low lr for fine tuning
 weight_decay <- 0.0001
-model_name <- "resnet_50"
+model_name <- "efficient_net_b0"
 train_dataset_path <- file.path("datasets", "fire_dataset", "train")
 test_dataset_path <- file.path("datasets", "fire_dataset", "test")
-big_test_dataset_path <- file.path("datasets", "forest_fire_dataset", "train")
+big_test_dataset_path <- file.path("datasets", "forest_fire_dataset", "test")
 checkpoint_dir <- file.path("training", model_name)
 checkpoint_path <- file.path(checkpoint_dir, "cp-list{epoch:04d}.ckpt")
 train <- FALSE  # choose if train or evaluate only
