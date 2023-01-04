@@ -1,8 +1,43 @@
 library(caret)
 library(corrplot)
-library(ggplot2)
 library(tidyverse)
 
+cutoff_redundant <- 0.5
+cutoff_useless <- 0.1
+top_categ <- 15
+
+# returns the most useful numeric features
+filter_quantitative_features <- function(df) {
+  df <- df %>% select(where(is.numeric))
+  corr <- cor(df, use = "pairwise.complete.obs", method = "pearson")
+  
+  highlyCorrelated <- findCorrelation(corr, cutoff = cutoff_redundant)
+  corr[upper.tri(corr)] <- 0
+  corrplot(corr, method = "circle")
+  
+  lastRow <- corr[nrow(corr), ]
+  noCorrelated <- which(lastRow < cutoff_useless, arr.ind = TRUE)
+  worst <- union(highlyCorrelated, noCorrelated)
+  worst <- colnames(df)[worst]
+  worst <- worst[!worst == 'SalePrice']
+
+  return (worst)
+}
+
+# returns the most useful categorical features
+filter_categorical_features <- function(df) {
+  decision <- df$SalePrice
+  predictors <- df %>% select(where(is.factor))
+  randomForest <- caret::train(predictors, decision, data = df,
+                               method = "rf", ntree = 100, importance = TRUE)
+  imp <- varImp(randomForest, scale = TRUE)
+  imp <- imp$importance
+  plot(imp)
+  best <- rownames(imp)[order(imp$Overall, decreasing=TRUE)[1:top_categ]]
+  worst <- setdiff(rownames(imp), best)
+
+  return (worst)
+}
 
 quantile_method <- function(x) {
   quantile1 <- quantile(x, probs = .25)
@@ -29,115 +64,109 @@ remove_outliers <- function(dataframe, columns = names(dataframe), method) {
   return(dataframe)
 }
 
-corr_matrix <- function(df, method) {
-  if(method == "pearson") {
-    corr <- cor(df %>% select(where(is.numeric)), use = "pairwise.complete.obs", method = method)
-    print("Highly correlated numeric features: ")
-  } else if(method == "spearman") {
-    df <- cbind(df %>% select(where(is.factor)), SalePrice = df$SalePrice)
-    df <- sapply(df, as.numeric)
-    corr <- cor(df, use = "pairwise.complete.obs", method = method)
-    print("Highly correlated categorical features: ")
-  }
-  highlyCorrelated <- findCorrelation(corr, cutoff = 0.6)
-  print(highlyCorrelated)
-  corr[upper.tri(corr)] <- 0
-  corrplot(corr, method = "circle")
-  
-  return (highlyCorrelated)
-}
+set.seed(42)
 
 train_dataset_path <- file.path("datasets", "house_prices_dataset", "train.csv")
 test_dataset_path <- file.path("datasets", "house_prices_dataset", "test.csv")
 
-train_dataset <- read.csv(train_dataset_path)
-test_dataset <- read.csv(test_dataset_path)
+train_dataset <- read.csv2(train_dataset_path, sep=",", stringsAsFactors = TRUE)
+test_dataset <- read.csv2(test_dataset_path, sep=",", stringsAsFactors = TRUE)
 
-# looking a couple of the first rows
-head(train_dataset)
+# merging the two splits for easier preprocessing
+test_dataset$SalePrice <- 0
+train_length <- nrow(train_dataset)
+dataset <- rbind(train_dataset, test_dataset)
 
-# print type of each column
-str(train_dataset)
+dataset <- select(dataset, -Id)
 
 # adjusting types
-train_dataset$MSSubClass <- as.character(train_dataset$MSSubClass)
-train_dataset$OverallQual <- as.character(train_dataset$OverallQual)
-train_dataset$OverallCond <- as.character(train_dataset$OverallCond)
-train_dataset$YearBuilt <- as.character(train_dataset$YearBuilt)
-train_dataset$YearRemodAdd <- as.character(train_dataset$YearRemodAdd)
-train_dataset$GarageYrBlt <- as.character(train_dataset$GarageYrBlt)
-train_dataset$MoSold <- as.character(train_dataset$MoSold)
-train_dataset$YrSold <- as.character(train_dataset$YrSold)
-train_dataset$YrSold <- as.character(train_dataset$YrSold)
-train_dataset <- train_dataset %>% mutate(across(where(is.integer), as.numeric))
+dataset$MSSubClass <- as.factor(dataset$MSSubClass)
+dataset$OverallQual <- as.factor(dataset$OverallQual)
+dataset$OverallCond <- as.factor(dataset$OverallCond)
+
+### DATA EXPLORATION ###
+dataset %>%
+  keep(is.numeric) %>%   
+  gather() %>%                  
+  ggplot(aes(value)) + 
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram()
+
+dataset %>%
+  keep(is.factor) %>%
+  gather() %>%
+  ggplot(aes(value)) + 
+  facet_wrap(~ key, scales = "free") +
+  geom_bar()
+
+# first removals
+dataset <- select(dataset, -GarageCars)
+dataset <- select(dataset, -GarageYrBlt)
+dataset <- select(dataset, -Utilities)
+
+# print type of each column with missing values
+na_cols <- which(colSums(is.na(dataset)) > 0)
+str(dataset[na_cols])
+
+### handling numeric types missing values ###
+
+# here NA means the feature is missing in the dataset (not recorded)
+cols <- c("GarageCars", "GarageArea", "BsmtFinSF1")
+dataset <- dataset %>% mutate(across(where(is.numeric), ~replace_na(., median(.))))
+
+# in the remaining numeric features NA means 0
+dataset <- dataset %>% mutate(across(where(is.numeric), ~replace_na(., 0)))
+
+### handling factor types missing values ###
+
+# here NA means the feature is missing in the dataset (not recorded)
+cols <- c("MSZoning", "Exterior1st", "Exterior2nd", "MasVnrType", "Electrical", "KitchenQual", "Functional", "SaleType")
+dataset <- dataset %>% mutate(across(all_of(cols), ~replace_na(., mode(.))))
+
+# here NA means the feature is missing in the house
+cols <- c("Alley", "BsmtQual", "BsmtExposure", "BsmtFinType1", "BsmtFinType2", "FireplaceQu", "PoolQC", "Fence", "MiscFeature", "GarageType", "GarageFinish", "GarageQual", "GarageCond", "BsmtCond")
+dataset <- dataset %>% mutate(across(all_of(cols), ~replace_na(., "NO")))
+
+# convert all char columns to factors (they are categorical variables)
+dataset <- dataset %>% mutate(across(where(is.character), as.factor))
 
 # printing descriptive statistics for each feature
-summary(train_dataset)
+summary(dataset)
 
-# remove Id column
-train_dataset <- select(train_dataset, -Id)
-train_dataset <- select(train_dataset, -GarageYrBlt)
+# remove near zero variance features
+dataset <- dataset[,-nearZeroVar(dataset)]
 
-# print the number of NA values for each column
-print(colSums(is.na(train_dataset)))
+# rank quantitative features
+worst_num <- filter_quantitative_features(dataset[1:train_length,])
+dataset <- select(dataset, -worst_num)
 
-# drop features with more than 2/3 NA values
-train_dataset <- train_dataset[, colSums(is.na(train_dataset)) <= sample_count / 3 * 2]
+# rank categorical features
+worst_cat <- filter_categorical_features(dataset[1:train_length,])
+dataset <- select(dataset, -worst_cat)
 
-# replacing NA with median in numeric columns
-train_dataset <- train_dataset %>% mutate(across(where(is.numeric), ~replace_na(., median(., na.rm=TRUE))))
-
-# replacing NA with mode in categorical columns
-train_dataset <- train_dataset %>% mutate(across(where(is.character), ~replace_na(., mode(.))))
-train_dataset <- train_dataset %>% mutate(across(where(is.character), as.factor))
-
-# print correlation matrix of numeric features
-highlyCorrelatedNum <- corr_matrix(train_dataset, method = "pearson")
-
-# print correlation matrix of categorical features
-highlyCorrelatedCateg <- corr_matrix(train_dataset, method = "spearman")
-
-# merge indexes
-highlyCorrelated <- c(highlyCorrelatedNum, highlyCorrelatedCateg)
-# train_dataset <- select(train_dataset, -highlyCorrelated)
-
-# remove GarageCars because it's higly correlated to GarageArea
-train_dataset <- select(train_dataset, -GarageCars)
-
-# remove TotRmsAbvGrd because it's higly correlated to GrLivArea
-train_dataset <- select(train_dataset, -TotRmsAbvGrd)
-
-# plot stronger correlations to check homoscedasticity / heteroscedasticity assumption
-ggplot(train_dataset, aes(x = factor(OverallQual,level=1:10), y = SalePrice,
-                          fill = OverallQual)) + geom_boxplot() +
-                          scale_x_discrete(name ="OverallQual") +
-                          scale_fill_discrete(breaks=1:10) 
-ggplot(train_dataset, aes(TotalBsmtSF, SalePrice)) + geom_point()
-ggplot(train_dataset, aes(X1stFlrSF, SalePrice)) + geom_point()
-ggplot(train_dataset, aes(GrLivArea, SalePrice)) + geom_point()
-ggplot(train_dataset, aes(GarageArea, SalePrice)) + geom_point()
+### MODEL ###
+train_dataset <- dataset[1:train_length,]
 
 # remove outliers
-train_dataset <- remove_outliers(train_dataset, method = "quantile")
-print(nrow(train_dataset))
+# train_dataset <- remove_outliers(train_dataset, method = "quantile")
+
+test_dataset <- dataset[train_length + 1:nrow(dataset),]
 
 # Specify 10-fold cross validation
-set.seed(42)
 ctrl <- trainControl(method = "cv",  number = 10) 
 
 # CV bagged model
-bagged_cv <- train(
+bagged_model <- caret::train(
   SalePrice ~ .,
   data = train_dataset,
-  method = "treebag",
-  trControl = ctrl,
-  importance = TRUE
+  method = "rf",
+  trControl = ctrl
 )
 
 # validation metrics
-print(bagged_cv)
+print(bagged_model)
 
-linear_cv <- train(
+linear_model <- caret::train(
   SalePrice ~ .,
   data = train_dataset,
   method = 'lm',
@@ -145,39 +174,5 @@ linear_cv <- train(
 )
 
 # validation metrics
-print(linear_cv)
+print(linear_model)
 
-# adjsting test dataset types
-test_dataset$MSSubClass <- as.character(test_dataset$MSSubClass)
-test_dataset$OverallQual <- as.character(test_dataset$OverallQual)
-test_dataset$OverallCond <- as.character(test_dataset$OverallCond)
-test_dataset$YearBuilt <- as.character(test_dataset$YearBuilt)
-test_dataset$YearRemodAdd <- as.character(test_dataset$YearRemodAdd)
-test_dataset$GarageYrBlt <- as.character(test_dataset$GarageYrBlt)
-test_dataset$MoSold <- as.character(test_dataset$MoSold)
-test_dataset$YrSold <- as.character(test_dataset$YrSold)
-test_dataset$YrSold <- as.character(test_dataset$YrSold)
-test_dataset <- train_dataset %>% mutate(across(where(is.integer), as.numeric))
-
-# final test evaluation cart
-pred_cart <- predict(bagged_cv, test_dataset)
-MAE(pred_cart, test_dataset$SalePrice)
-
-# final test evaluation linear
-pred_lm <- predict(linear_cv, test_dataset)
-MAE(pred_lm, test_dataset$SalePrice)
-
-# checking how the cart error is distributed
-results_cart <- data.frame(pred = pred_cart, target = test_dataset$SalePrice, error = pred_cart - test_dataset$SalePrice)
-ggplot(results_cart, aes(pred, target)) + geom_point() + geom_abline(aes(intercept = 0, slope = 1, color = "red"))
-
-# plotting errors distribution cart
-ggplot(results_cart, aes(error)) + geom_density(aes(y = ..count..), fill = "lightgray") +
-  geom_vline(aes(xintercept = mean(error)), 
-             linetype = "dashed", size = 0.6,
-             color = "red")
-
-# compute metrics for Kaggle submission
-# RMSE of logs is used because taking logs means that errors in predicting
-# expensive houses and cheap houses will affect the result equally.
-print(RMSE(log(results_cart$pred), log(results_cart$target)))
