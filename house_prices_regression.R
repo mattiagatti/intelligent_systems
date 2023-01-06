@@ -173,8 +173,12 @@ bagged_model <- caret::train(
   SalePrice ~ .,  # log(SalePrice) ~ .
   data = train_dataset,
   method = "rf",
-  trControl = ctrl
+  trControl = ctrl,
+  importance = TRUE
 )
+
+imp <- varImp(bagged_model)
+write.csv(imp$importance, file = "final_imp.csv")
 
 linear_model <- caret::train(
   SalePrice ~ .,  # log(SalePrice) ~ .
